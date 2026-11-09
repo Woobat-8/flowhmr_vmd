@@ -1,154 +1,74 @@
-<div align="center">
-<a href="https://flowhmr.github.io/"><img src="assets/FlowHMR-logo-tagline.svg" alt="FlowHMR: Physically Plausible Motion Capture from Video" width="880"></a>
+# FlowHMR VMD Export Fork
 
-<a href="https://huggingface.co/spaces/fafsaf1/FlowHMR"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Demo-yellow" alt="Hugging Face Demo Space"></a>
-<a href="https://arxiv.org/abs/2610.03691"><img src="https://img.shields.io/badge/arXiv-2610.03691-b31b1b" alt="arXiv"></a>
-<a href="https://flowhmr.github.io/"><img src="https://img.shields.io/badge/Project_Page-FlowHMR-green" alt="Project Page"></a>
-<a href="https://huggingface.co/fafsaf1/flowhmr-0.46B"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Model-blue" alt="Hugging Face Model"></a>
-</div>
+For the full upstream project background, setup, and original documentation, see the original FlowHMR README:
+https://github.com/flowhmr/flowhmr/blob/main/README.md
 
-## Overview
+This repository is a fork of FlowHMR focused on adding a VMD export backend for standard MMD humanoid animation output.
 
-- 🎉🎉🎉 [2026-10-31] Our [Hugging Face demo](https://huggingface.co/spaces/fafsaf1/FlowHMR) is now live!
-  Reconstruct and preview 3D motion in your browser, with NPZ/FBX export.
-- 🚀🚀🚀 [2026-10-30] Updated inference acceleration: approximately **10× faster SAM feature extraction**
-  (with compile) and **over 5× faster end-to-end inference** (static camera, with compile) on our 300-frame A100 benchmark.
-  See the [resource and performance report](docs/performance.md).
-  Get started with [CLI inference](docs/inference.md) or the [Web demo](docs/web_demo.md).
+## What this fork adds
 
-We are releasing the full workflow, from data synthesis to training and evaluation, step by step.
+This project keeps the original FlowHMR motion reconstruction pipeline and adds a separate export path for MikuMikuDance-compatible VMD files.
 
-- [x] Inference code and checkpoints ([guide](docs/inference.md), [models](#model-zoo))
-- [x] Pretraining and GRPO post-training code ([guide](docs/training.md))
-- [x] Web demo ([guide](docs/web_demo.md))
-- [x] Synthetic data generation code ([guide](data/rendering_data/README.md))
-- [x] Wild-4K evaluation clip list ([list](data/wild4k/README.md))
-- [x] Hugging Face demo ([Space](https://huggingface.co/spaces/fafsaf1/FlowHMR))
+The scope of the modifications is intentionally narrow:
 
-## Model Zoo
+- preserve the existing FlowHMR video-to-SMPL-H reconstruction pipeline
+- keep existing `.npz` output behavior intact
+- keep existing FBX export behavior intact
+- add a new MMD/VMD export backend based on the reconstructed SMPL-H motion
+- map SMPL-H motion into conventional Japanese-named MMD bones
+- write valid `.vmd` animation files for import into standard MMD humanoid models
 
-| Model | Description | Params | Tracking Success ↑ | Download |
-|---|---|:---:|:---:|:---:|
-| `flowhmr_base` | Base model | 0.46B | 78.79% | [🤗 HF](https://huggingface.co/fafsaf1/flowhmr-0.46B/tree/main/flowhmr_base) |
-| `flowhmr_latest` | `flowhmr_base` + GRPO with PHC+ physics reward **(recommended)** | 0.46B | **82.47%** | [🤗 HF](https://huggingface.co/fafsaf1/flowhmr-0.46B/tree/main/flowhmr_latest) |
+## Core functionality
 
-*Tracking Success*: the rate at which the PHC+ controller successfully tracks the predicted motion in simulation, measured on Wild-4K.
+This fork still supports the normal FlowHMR workflow:
 
-## Getting Started
+1. run inference from a video
+2. reconstruct 3D human motion in SMPL-H space
+3. save the motion as standard FlowHMR output
+4. optionally export the same motion as VMD for MMD
 
-Follow the guide for each step, or paste the prompt into your coding agent.
+The VMD export is designed to be an additional output format, not a replacement for the original FlowHMR outputs.
 
-### Installation
+## Output files
 
-[Installation guide](docs/install.md)
+The project keeps the usual FlowHMR output layout under `output/<video_name>/`, for example:
 
-FlowHMR supports two setups:
+- `flowhmr_latest.npz`
+- `flowhmr_latest.fbx`
+- `flowhmr_latest.vmd`
 
-- **V2M**: inference, web demo, and base model training in a single environment
-  (tested with Python 3.10 + PyTorch 2.5.1, cu118).
-- **Full pipeline**: V2M plus the PHC+ physics simulator for GRPO post-training and
-  physics tracking. The simulator runs in a separate Isaac Gym environment (tested with
-  Isaac Gym Preview 4, Python 3.8 + PyTorch 1.13, cu117). The two environments share no
-  imports and communicate through files on `/dev/shm`.
+The VMD file is generated from the same reconstructed motion data used by the existing FlowHMR exports.
 
-Some assets require license acceptance or gated access: the SMPL-family body models, VGGT-Omega, and SAM 3D Body.
+## Typical usage
 
-V2M:
+From the project root:
 
-```text
-Install FlowHMR from https://github.com/flowhmr/flowhmr following docs/install.md with the V2M setup.
+```bash
+python run_v2m_demo_generation.py <video_or_directory>
 ```
 
-Full pipeline:
+The repository’s existing inference and output pipeline remains the primary entry point. The VMD export is added as an additional backend alongside the current NPZ/FBX generation logic.
 
-```text
-Install FlowHMR from https://github.com/flowhmr/flowhmr following docs/install.md with the full pipeline setup.
-```
+## Project-specific modifications
 
-### Web Demo
+The main additions are:
 
-[Web demo guide](docs/web_demo.md)
+- a VMD writer that serializes standard VMD 0002 binary animation data
+- SMPL-H to MMD retargeting for conventional humanoid bone names
+- coordinate and rotation conversion from FlowHMR/SMPL-H space to MMD conventions
+- root motion and torso distribution logic appropriate for MMD skeletons
+- tests for VMD serialization and retargeting behavior
+- documentation for export usage, supported bones, and limitations
 
-Upload a video in the browser and reconstruct its 3D motion; when several people are
-detected, pick the one to reconstruct. Requires the V2M setup.
+## Important limitations
 
-```text
-Launch the FlowHMR web demo following docs/web_demo.md.
-```
+This is a compatibility-focused export layer, not a full PMX-authoring or model-specific retargeting system.
 
-### Inference
+- It targets the conventional standard MMD humanoid skeleton
+- supplementary or model-specific bones are optional and handled conservatively
+- IK is not assumed to be universally valid without PMX-specific rig information
+- VMD compatibility is intended to be broadly usable, but real-world MMD character behavior still depends on the target model rig
 
-[Inference guide](docs/inference.md)
+## Notes
 
-Reconstruct motion from a video on the command line. The pipeline runs person detection
-(YOLOX), camera estimation (VGGT-Omega), body feature extraction (SAM 3D Body), and
-FlowHMR, and saves the motion as `.npz` (plus `.fbx` if FBX export is installed).
-
-```text
-Run FlowHMR on my video following docs/inference.md.
-```
-
-### Data
-
-[Data guide](data/README.md)
-
-- **Training data** is not bundled. Bring your own in the
-  [documented format](docs/resources.md#training-inputs), or render synthetic videos
-  from SMPL-H motions with the Blender toolkit in [data/rendering_data](data/rendering_data/README.md).
-- **Wild-4K** is the 4182-clip in-the-wild evaluation set behind Tracking Success.
-  We release the [clip list](data/wild4k/README.md) (clip IDs from Koala-36M-v1),
-  not the videos.
-
-### Training
-
-[Training guide](docs/training.md)
-
-Training has two stages: pretraining the base model, then GRPO post-training with a physics reward.
-Prepare training data first (see [Data](#data) and [Prepare data](docs/training.md#0-prepare-data)).
-
-**Pretraining** (V2M setup) trains the flow-matching base model, `flowhmr_base`.
-
-```text
-Train the FlowHMR base model following docs/training.md.
-```
-
-**GRPO post-training** (full pipeline setup) fine-tunes `flowhmr_base` with the PHC+
-simulator as the reward: each generated motion is scored by how well the PHC+ controller
-tracks it. This produces `flowhmr_latest`.
-
-```text
-Run FlowHMR GRPO post-training following docs/training.md.
-```
-
-## Acknowledgements
-
-We thank the authors of these projects for releasing their code and models:
-
-- [HY-Motion 1.0](https://github.com/Tencent-Hunyuan/HY-Motion-1.0): MMDiT flow-matching backbone
-- [MixGRPO](https://github.com/Tencent-Hunyuan/MixGRPO): GRPO post-training for flow matching
-- [PHC](https://github.com/ZhengyiLuo/PerpetualHumanoidControl): PHC+ controller for physics reward and tracking evaluation
-- [GVHMR](https://github.com/zju3dv/GVHMR): world-grounded human motion recovery
-- [VGGT-Omega](https://github.com/facebookresearch/vggt-omega): camera estimation
-- [SAM 3D Body](https://github.com/facebookresearch/sam-3d-body): body features
-- [YOLOX](https://github.com/Megvii-BaseDetection/YOLOX): person detection
-- [Kimodo](https://github.com/nv-tlabs/kimodo) and [toyxyz_RGBMocap](https://github.com/toyxyz/toyxyz_RGBMocap): motion and contact correction
-
-## Citation
-
-If you find FlowHMR useful in your research, please cite:
-
-```bibtex
-@misc{wang2026flowhmr,
-      title={FlowHMR: Physically Plausible Motion Capture from Video},
-      author={Zhanke Wang and Chengfeng Zhao and Qing Shuai and Jingzhong Lin and Heng Li and Zeyu Ling and Yuxin Wen and Jing Li and Di Kang and Chunchao Guo and Linchao Bao},
-      year={2026},
-      eprint={2610.03691},
-      archivePrefix={arXiv},
-      primaryClass={cs.CV},
-      url={https://arxiv.org/abs/2610.03691},
-}
-```
-
-## License
-
-The FlowHMR source code is licensed under the Apache License 2.0. Third-party libraries and components are subject to their respective licenses. For model weights, please refer to the license specified in the [model card](https://huggingface.co/fafsaf1/flowhmr-0.46B).
+This repository is meant to extend the original FlowHMR project without changing its core reconstruction behavior. For installation details, model downloads, training, and the upstream project documentation, refer to the original FlowHMR README above.
