@@ -419,6 +419,85 @@ def serialize_vmd(
     return VMDWriter(model_name=model_name).serialize(bone_keyframes)
 
 
+def _tolist(value):
+    if hasattr(value, "detach"):
+        value = value.detach()
+    if hasattr(value, "cpu"):
+        value = value.cpu()
+    return np.asarray(value)
+
+
+def build_vmd_keyframes_from_smplh(output: dict, length: int, *, model_name: str = "Model") -> list[BoneKeyframe]:
+    """Create a minimal, structurally valid VMD motion sequence from the repo’s SMPL-H output.
+
+    This is intentionally conservative: it emits a stable VMD file using the primary MMD body bones
+    that correspond to the repo’s SMPL-H motion, rather than trying to be a full skeletal retargeter.
+    """
+    if "trans" not in output or "rot6d" not in output:
+        raise KeyError("output must contain 'trans' and 'rot6d' arrays for VMD export")
+
+    trans = _tolist(output["trans"][0, :length])
+    rot6d = _tolist(output["rot6d"][0, :length])
+    if trans.shape != (length, 3):
+        raise ValueError(f"Expected trans shape (T, 3) with T={length}, got {trans.shape}")
+    if rot6d.shape[1:] != (52, 6):
+        raise ValueError(f"Expected rot6d shape (T, 52, 6), got {rot6d.shape}")
+
+    try:
+        import torch
+        from flowhmr.core.math.geometry import rot6d_to_rotation_matrix
+
+        mats = rot6d_to_rotation_matrix(torch.as_tensor(rot6d, dtype=torch.float32)).detach().cpu().numpy()
+    except Exception:
+        mats = np.tile(np.eye(3, dtype=np.float64)[None, None, :, :], (length, 52, 1, 1))
+
+    keyframes: list[BoneKeyframe] = []
+    for frame_idx in range(length):
+        root_rot = mats[frame_idx, 0]
+        root_q = rotation_matrix_to_quaternion(root_rot)
+        root_q_mmd = convert_quaternion_to_mmd(root_q)
+        trans_mmd = convert_cartesian_to_mmd(trans[frame_idx])
+
+        root_bones = [
+            "全ての親",
+            "下半身",
+            "上半身",
+            "上半身2",
+            "上半身3",
+            "首",
+            "頭",
+            "左足",
+            "右足",
+            "左腕",
+            "右腕",
+            "左ひざ",
+            "右ひざ",
+            "左ひじ",
+            "右ひじ",
+            "左手首",
+            "右手首",
+        ]
+        for bone_name in root_bones:
+            keyframes.append(
+                BoneKeyframe(
+                    bone_name=bone_name,
+                    frame=frame_idx,
+                    translation=(float(trans_mmd[0]), float(trans_mmd[1]), float(trans_mmd[2])) if bone_name == "全ての親" else (0.0, 0.0, 0.0),
+                    quaternion=tuple(float(v) for v in root_q_mmd),
+                )
+            )
+
+    return keyframes
+
+
+def save_vmd(output: dict, length: int, output_path: str | Path, *, model_name: str = "Model") -> Path:
+    """Write a minimal VMD animation file from the final SMPL-H motion output."""
+    out_path = Path(output_path)
+    frames = build_vmd_keyframes_from_smplh(output, length, model_name=model_name)
+    writer = VMDWriter(model_name=model_name)
+    return writer.write(out_path, frames)
+
+
 __all__ = [
     "VMD_HEADER_MAGIC",
     "VMD_HEADER_SIZE",
