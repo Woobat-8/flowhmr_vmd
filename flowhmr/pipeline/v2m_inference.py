@@ -245,6 +245,12 @@ def _rotate_smplh_params_y180(poses_aa: np.ndarray, trans: np.ndarray):
     return poses_aa, trans
 
 
+def save_vmd(output: dict, length: int, output_path: str, *, model_name: str = "Model"):
+    """Write a VMD file from the same SMPL-H motion output used by the existing FBX export."""
+    from flowhmr.core.export.smplh2vmd import save_vmd as _save_vmd
+    return _save_vmd(output, length, output_path, model_name=model_name)
+
+
 def save_fbx(output: dict, length: int, output_path: str, save_npz: bool = True, export_mesh: bool = True):
     """Write the SMPL-H npz and, if the Autodesk FBX SDK is installed, the .fbx."""
     from flowhmr.core.math.geometry import (
@@ -297,6 +303,9 @@ def save_fbx(output: dict, length: int, output_path: str, save_npz: bool = True,
         return
     smplh2fbx = SMPLH2FBX()
     smplh2fbx.convert_npz_to_fbx(params, output_path, export_mesh=export_mesh)
+
+    vmd_path = output_path.replace(".fbx", ".vmd")
+    save_vmd(output, length, vmd_path, model_name="Model")
 
 
 # Bbox visualization helpers
